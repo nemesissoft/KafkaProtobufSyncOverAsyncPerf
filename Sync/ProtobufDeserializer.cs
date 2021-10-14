@@ -4,8 +4,10 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+
 using Confluent.Kafka;
 using Confluent.SchemaRegistry.Serdes;
+
 using Google.Protobuf;
 
 
@@ -82,42 +84,29 @@ namespace KafkaDeserPerf.Sync
         public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
         {
             if (isNull) return null;
+            int pos = 0;
 
-            var array = data.ToArray();
-            if (array.Length < 6)
+            if (data.Length < 6)
                 throw new InvalidDataException(
-                    $"Expecting data framing of length 6 bytes or more but total data size is {array.Length} bytes");
+                    $"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
 
-            using var stream = new MemoryStream(array);
-            using var reader = new BinaryReader(stream);
-            var magicByte = reader.ReadByte();
+            var magicByte = data[pos++];
             if (magicByte != Constants.MagicByte)
-            {
-                throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {array[0]}, expecting {Constants.MagicByte}");
-            }
+                throw new InvalidDataException(
+                    $"Expecting message {context.Component} with Confluent Schema Registry framing. Magic byte was {data[0]}, expecting {Constants.MagicByte}");
 
-            // A schema is not required to deserialize protobuf messages since the
-            // serialized data includes tag and type information, which is enough for
-            // the IMessage<T> implementation to deserialize the data (even if the
-            // schema has evolved). _schemaId is thus unused.
-            IPAddress.NetworkToHostOrder(reader.ReadInt32());
+            // A schema is not required to deserialize protobuf messages since the  serialized data includes tag and type information, which is enough for
+            // the IMessage<T> implementation to deserialize the data (even if the schema has evolved). _schemaId is thus unused.
+            pos += 4; //IPAddress.NetworkToHostOrder(reader.ReadInt32());
 
-            // Read the index array length, then all of the indices. These are not
-            // needed, but parsing them is the easiest way to seek to the start of
-            // the serialized data because they are varints.
-            var indicesLength = _useDeprecatedFormat ? (int)stream.ReadUnsignedVarint() : stream.ReadVarint();
+            // Read the index array length, then all of the indices. These are not needed, but parsing them is the easiest way
+            // to seek to the start of the serialized data because they are varints.
+            var indicesLength = data.ReadVarint(ref pos);
             for (int i = 0; i < indicesLength; ++i)
             {
-                if (_useDeprecatedFormat)
-                {
-                    stream.ReadUnsignedVarint();
-                }
-                else
-                {
-                    stream.ReadVarint();
-                }
+                data.ReadVarint(ref pos);
             }
-            return _parser.ParseFrom(stream);
+            return _parser.ParseFrom(data.Slice(pos, data.Length - pos));
 
         }
     }

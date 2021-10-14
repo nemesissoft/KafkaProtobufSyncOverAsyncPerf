@@ -69,5 +69,32 @@ namespace Confluent.SchemaRegistry.Serdes
             value |= b << i;
             return (uint)value;
         }
+
+        public static int ReadVarint(this ReadOnlySpan<byte> buffer, ref int position)
+        {
+            var value = ReadUnsignedVarint(buffer, ref position);
+            return (int)((value >> 1) ^ -(value & 1));
+        }
+
+        public static uint ReadUnsignedVarint(this ReadOnlySpan<byte> buffer, ref int position)
+        {
+            int value = 0;
+            int i = 0;
+            int b;
+            while (true)
+            {
+                b = buffer[position++];
+                if (b == -1) throw new InvalidOperationException("Unexpected end of stream reading varint.");
+                if ((b & 0x80) == 0) { break; }
+                value |= (b & 0x7f) << i;
+                i += 7;
+                if (i > 28)
+                {
+                    throw new OverflowException($"Encoded varint is larger than uint.MaxValue");
+                }
+            }
+            value |= b << i;
+            return (uint)value;
+        }
     }
 }

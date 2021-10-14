@@ -1,16 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 
 using BenchmarkDotNet.Running;
-
-using Confluent.Kafka;
-using Confluent.SchemaRegistry;
-using Confluent.SchemaRegistry.Serdes;
 using Google.Protobuf;
-
-using KafkaDeserPerf.Sync;
-
 using Tutorial;
 
 using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
@@ -21,6 +13,7 @@ namespace KafkaDeserPerf
     {
         static void Main(string[] args)
         {
+            //new DeserializerBenchmarks().Sync();
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
         }
 
