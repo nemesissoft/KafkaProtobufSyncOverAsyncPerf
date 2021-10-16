@@ -1,11 +1,6 @@
 ﻿using System;
-using System.IO;
-
 using BenchmarkDotNet.Running;
-using Google.Protobuf;
-using Tutorial;
 
-using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
 namespace KafkaDeserPerf
 {
@@ -13,11 +8,13 @@ namespace KafkaDeserPerf
     {
         static void Main(string[] args)
         {
-            //new DeserializerBenchmarks().Sync();
+            //new DeserializerBenchmarks().Confluent();
+            //new DeserializerBenchmarks().NonAlloc();
+            //new DeserializerBenchmarks().NonAllocSync();
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
         }
 
-        private static void Read()
+        /*private static void Read()
         {
             var payload = new byte[]
             {
@@ -47,7 +44,7 @@ namespace KafkaDeserPerf
             var array = "new byte[]{" + string.Join(", ", ms.ToArray()) + "}";
         }
 
-        /*private static void WriteConfluent()
+        private static void WriteConfluent()
         {
             var p = new Person
             {

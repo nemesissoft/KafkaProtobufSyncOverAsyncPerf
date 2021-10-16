@@ -19,12 +19,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Net;
+
 using Confluent.Kafka;
+using Confluent.SchemaRegistry.Serdes;
+
 using Google.Protobuf;
 
 
-namespace Confluent.SchemaRegistry.Serdes
+namespace KafkaDeserPerf.Deserializers
 {
     /// <summary>
     ///     (async) Protobuf deserializer.
@@ -45,7 +47,8 @@ namespace Confluent.SchemaRegistry.Serdes
     ///                            a single 0 byte as an optimization.
     ///                         2. The protobuf serialized data.
     /// </remarks>
-    public class ProtobufDeserializer<T> : IAsyncDeserializer<T> where T : class, IMessage<T>, new()
+    public class NonAllocProtobufDeserializer<T> : IAsyncDeserializer<T>, IDeserializer<T>
+        where T : class, IMessage<T>, new()
     {
         private bool useDeprecatedFormat = false;
 
@@ -58,7 +61,7 @@ namespace Confluent.SchemaRegistry.Serdes
         ///     Deserializer configuration properties (refer to 
         ///     <see cref="ProtobufDeserializerConfig" />).
         /// </param>
-        public ProtobufDeserializer(IEnumerable<KeyValuePair<string, string>> config = null)
+        public NonAllocProtobufDeserializer(IEnumerable<KeyValuePair<string, string>> config = null)
         {
             this.parser = new MessageParser<T>(() => new T());
 
@@ -70,7 +73,7 @@ namespace Confluent.SchemaRegistry.Serdes
                 throw new ArgumentException($"ProtobufDeserializer: unknown configuration parameter {nonProtobufConfig.First().Key}");
             }
 
-            ProtobufDeserializerConfig protobufConfig = new ProtobufDeserializerConfig(config);
+            var protobufConfig = new ProtobufDeserializerConfig(config);
             if (protobufConfig.UseDeprecatedFormat != null)
             {
                 this.useDeprecatedFormat = protobufConfig.UseDeprecatedFormat.Value;
@@ -97,52 +100,84 @@ namespace Confluent.SchemaRegistry.Serdes
         public Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
         {
             if (isNull) { return Task.FromResult<T>(null); }
-
-            var array = data.ToArray();
-            if (array.Length < 6)
+            
+            if (data.Length < 6)
             {
-                throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {array.Length} bytes");
+                throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
             }
 
             try
             {
-                using (var stream = new MemoryStream(array))
-                using (var reader = new BinaryReader(stream))
+                int pos = 0;
+                ReadOnlySpan<byte> span = data.Span;
+                var magicByte = span[pos++];
+                if (magicByte != Constants.MagicByte)
                 {
-                    var magicByte = reader.ReadByte();
-                    if (magicByte != Constants.MagicByte)
-                    {
-                        throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {array[0]}, expecting {Constants.MagicByte}");
-                    }
-
-                    // A schema is not required to deserialize protobuf messages since the
-                    // serialized data includes tag and type information, which is enough for
-                    // the IMessage<T> implementation to deserialize the data (even if the
-                    // schema has evolved). _schemaId is thus unused.
-                    var _schemaId = IPAddress.NetworkToHostOrder(reader.ReadInt32());
-
-                    // Read the index array length, then all of the indices. These are not
-                    // needed, but parsing them is the easiest way to seek to the start of
-                    // the serialized data because they are varints.
-                    var indicesLength = useDeprecatedFormat ? (int)stream.ReadUnsignedVarint() : stream.ReadVarint();
-                    for (int i = 0; i < indicesLength; ++i)
-                    {
-                        if (useDeprecatedFormat)
-                        {
-                            stream.ReadUnsignedVarint();
-                        }
-                        else
-                        {
-                            stream.ReadVarint();
-                        }
-                    }
-                    return Task.FromResult(parser.ParseFrom(stream));
+                    throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {span[0]}, expecting {Constants.MagicByte}");
                 }
+
+                // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
+                // the IMessage<T> implementation to deserialize the data (even if the schema has evolved). _schemaId is thus unused.
+                // EDIT: so just advancing by 4 bytes is enough 
+                pos += 4; //var _schemaId = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+
+                // Read the index array length, then all of the indices. These are not needed, but parsing them is the easiest way to seek to the start of the serialized data because they are varints.
+                var indicesLength = useDeprecatedFormat ? (int)span.ReadUnsignedVarint(ref pos) : span.ReadVarint(ref pos);
+                for (int i = 0; i < indicesLength; ++i)
+                {
+                    if (useDeprecatedFormat)
+                    {
+                        span.ReadUnsignedVarint(ref pos);
+                    }
+                    else
+                    {
+                        span.ReadVarint(ref pos);
+                    }
+                }
+                return Task.FromResult(parser.ParseFrom(span.Slice(pos, data.Length - pos)));
             }
             catch (AggregateException e)
             {
                 throw e.InnerException;
             }
+        }
+
+        public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
+        {
+            if (isNull) { return null; }
+            int pos = 0;
+
+
+            if (data.Length < 6)
+            {
+                throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
+            }
+
+            var magicByte = data[pos++];
+            if (magicByte != Constants.MagicByte)
+            {
+                throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {data[0]}, expecting {Constants.MagicByte}");
+            }
+
+            // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
+            // the IMessage<T> implementation to deserialize the data (even if the schema has evolved). _schemaId is thus unused.
+            // EDIT: so just advancing by 4 bytes is enough 
+            pos += 4; //var _schemaId = IPAddress.NetworkToHostOrder(reader.ReadInt32());
+
+            // Read the index array length, then all of the indices. These are not needed, but parsing them is the easiest way to seek to the start of the serialized data because they are varints.
+            var indicesLength = useDeprecatedFormat ? (int)data.ReadUnsignedVarint(ref pos) : data.ReadVarint(ref pos);
+            for (int i = 0; i < indicesLength; ++i)
+            {
+                if (useDeprecatedFormat)
+                {
+                    data.ReadUnsignedVarint(ref pos);
+                }
+                else
+                {
+                    data.ReadVarint(ref pos);
+                }
+            }
+            return parser.ParseFrom(data.Slice(pos, data.Length - pos));
         }
     }
 }

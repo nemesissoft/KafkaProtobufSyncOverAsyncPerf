@@ -15,7 +15,7 @@
 // Refer to LICENSE for more information.
 
 
-namespace Confluent.SchemaRegistry.Serdes
+namespace KafkaDeserPerf.Deserializers
 {
     internal static class Constants
     {
