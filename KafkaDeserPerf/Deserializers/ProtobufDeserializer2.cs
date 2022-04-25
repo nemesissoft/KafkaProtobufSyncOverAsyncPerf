@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Net;
 
 using Confluent.Kafka;
 using Confluent.SchemaRegistry.Serdes;
@@ -13,9 +12,7 @@ using Google.Protobuf;
 
 namespace KafkaDeserPerf.Deserializers
 {
-    /// <summary>
-    ///     (async) Protobuf deserializer.
-    /// </summary>
+    /// <summary>Protobuf deserializer.</summary>
     /// <remarks>
     ///     Serialization format:
     ///       byte 0:           A magic byte that identifies this as a message with
@@ -69,41 +66,29 @@ namespace KafkaDeserPerf.Deserializers
         {
             if (isNull) { return Task.FromResult<T>(null); }
 
-            var array = data.ToArray();
-            if (array.Length < 6)
-                throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {array.Length} bytes");
+            if (data.Length < 6)
+                throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
 
-            try
-            {
-                using (var stream = new MemoryStream(array))
-                using (var reader = new BinaryReader(stream))
-                {
-                    var magicByte = reader.ReadByte();
-                    if (magicByte != MagicByte)
-                    {
-                        throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {array[0]}, expecting {MagicByte}");
-                    }
+            var spanReader = new SpanBufferReader(data.Span);
 
-                    // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
-                    // the IMessage<T> implementation to deserialize the data (even if the schema has evolved). Schema Id is thus unused
-                    IPAddress.NetworkToHostOrder(reader.ReadInt32());
+            var magicByte = spanReader.ReadByte();
+            if (magicByte != MagicByte)
+                throw new InvalidDataException($"Expecting message {context.Component} with Confluent Schema Registry framing. Magic byte was {magicByte}, expecting {MagicByte}");
 
-                    // Read the index array length, then all of the indices. These are not needed, but parsing them is the easiest way to seek to the start of the serialized data because they are varints.
-                    var indicesLength = _useDeprecatedFormat ? (int)stream.ReadUnsignedVarint() : stream.ReadVarint();
-                    for (int i = 0; i < indicesLength; ++i)
-                    {
-                        if (_useDeprecatedFormat)
-                            stream.ReadUnsignedVarint();
-                        else
-                            stream.ReadVarint();
-                    }
-                    return Task.FromResult(_parser.ParseFrom(stream));
-                }
-            }
-            catch (AggregateException e)
-            {
-                throw e.InnerException;
-            }
+            // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
+            // the IMessage<T> implementation to deserialize the data (even if the schema has evolved). Schema Id is thus unused
+            // EDIT: so just advancing by 4 bytes is enough
+            spanReader.AdvanceBy(4); //var _schemaId = IPAddress.NetworkToHostOrder(spanReader.ReadInt32());
+
+            // Read the index array length, then all of the indices. These are not needed, but parsing them is the easiest way to seek to the start of the serialized data because they are varints.
+            var indicesLength = _useDeprecatedFormat ? (int)spanReader.ReadUnsignedVarint() : spanReader.ReadVarint();
+            for (int i = 0; i < indicesLength; ++i)
+                if (_useDeprecatedFormat)
+                    spanReader.ReadUnsignedVarint();
+                else
+                    spanReader.ReadVarint();
+
+            return Task.FromResult(_parser.ParseFrom(spanReader.Tail()));
         }
     }
 }
