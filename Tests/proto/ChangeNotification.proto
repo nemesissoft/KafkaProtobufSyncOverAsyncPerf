@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Stock {
+	repeated string aliases = 1;
+}
+
+message Currency {
+	float amount = 1;
+}
+
+enum Status {
+	UNKNOWN = 0;
+	PENDING = 1;
+	ACTIVE = 2;
+	SUSPENDED = 3;
+	CLOSED = 4;
+}
+
+message ChangeNotification {
+	int32 id = 1;
+	Status status = 2;
+	google.protobuf.Timestamp time = 3;
+	
+
+	oneof instrument {
+		Stock stock = 5;
+		Currency currency = 6;
+	}
+}

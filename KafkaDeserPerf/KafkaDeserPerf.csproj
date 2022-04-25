@@ -4,14 +4,18 @@
 		<OutputType>Exe</OutputType>
 		<LangVersion>9.0</LangVersion>
 		<TargetFramework>net5.0</TargetFramework>
+		<Nullable>enable</Nullable>
+
 	</PropertyGroup>
 
 
 	<ItemGroup>
 		<PackageReference Include="BenchmarkDotNet" Version="0.13.1" />
-		<PackageReference Include="Confluent.Kafka" Version="1.8.1" />
-		<PackageReference Include="Confluent.SchemaRegistry.Serdes.Protobuf" Version="1.8.1" />
-		<PackageReference Include="Google.Protobuf" Version="3.18.1" />
+		
+		<PackageReference Include="Confluent.Kafka" Version="1.8.2" />
+		<PackageReference Include="Confluent.SchemaRegistry.Serdes.Protobuf" Version="1.8.2" />
+
+		<PackageReference Include="Google.Protobuf" Version="3.20.1" />
 	</ItemGroup>
 
 </Project>
