@@ -50,6 +50,11 @@ namespace KafkaDeserPerf.Deserializers
     public class NonAllocProtobufDeserializer<T> : IAsyncDeserializer<T>, IDeserializer<T>
         where T : class, IMessage<T>, new()
     {
+        /// <summary>
+        ///     Magic byte that identifies a message with Confluent Platform framing.
+        /// </summary>
+        public const byte MagicByte = 0;
+
         private bool useDeprecatedFormat = false;
 
         private MessageParser<T> parser;
@@ -111,9 +116,9 @@ namespace KafkaDeserPerf.Deserializers
                 int pos = 0;
                 ReadOnlySpan<byte> span = data.Span;
                 var magicByte = span[pos++];
-                if (magicByte != Constants.MagicByte)
+                if (magicByte != MagicByte)
                 {
-                    throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {span[0]}, expecting {Constants.MagicByte}");
+                    throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {span[0]}, expecting {MagicByte}");
                 }
 
                 // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
@@ -154,9 +159,9 @@ namespace KafkaDeserPerf.Deserializers
             }
 
             var magicByte = data[pos++];
-            if (magicByte != Constants.MagicByte)
+            if (magicByte != MagicByte)
             {
-                throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {data[0]}, expecting {Constants.MagicByte}");
+                throw new InvalidDataException($"Expecting message {context.Component.ToString()} with Confluent Schema Registry framing. Magic byte was {data[0]}, expecting {MagicByte}");
             }
 
             // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
