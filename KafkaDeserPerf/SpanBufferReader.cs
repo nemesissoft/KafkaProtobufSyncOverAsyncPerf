@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 
 namespace KafkaDeserPerf
 {
+    /// <summary>Lightweight reader wrapper for <see cref="ReadOnlySpan{T}"/> that follows <see cref="System.IO.StreamReader"/> logic</summary>
     public ref struct SpanBufferReader
     {
         private readonly ReadOnlySpan<byte> _buffer;
