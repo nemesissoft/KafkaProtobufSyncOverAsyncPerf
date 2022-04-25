@@ -10,6 +10,7 @@ using Confluent.Kafka;
 using Confluent.SchemaRegistry;
 using Confluent.SchemaRegistry.Serdes;
 using Google.Protobuf;
+using KafkaDeserPerf.Deserializers;
 using NUnit.Framework;
 using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
@@ -19,6 +20,7 @@ namespace Tests
     public class ProtobufSerdesTests
     {
         private ISchemaRegistryClient? _schemaRegistryClient;
+        private SerializationContext _context;
         private const string TestTopic = "topic";
         private readonly Dictionary<string, int> _store = new();
 
@@ -26,6 +28,8 @@ namespace Tests
         public void BeforeEachTest()
         {
             var subject = $"{TestTopic}-value";
+
+            _context = new SerializationContext(MessageComponentType.Value, TestTopic);
 
             var schemaRegistryMock = new Mock<ISchemaRegistryClient>();
             schemaRegistryMock.Setup(x => x.ConstructValueSubjectName(TestTopic, It.IsAny<string>())).Returns(subject);
@@ -38,34 +42,40 @@ namespace Tests
             _schemaRegistryClient = schemaRegistryMock.Object;
         }
 
-        private (ProtobufSerializer<T> Ser, ProtobufDeserializer<T> Des) GetSerdes<T>() where T : class, IMessage<T>, new() => (
+        private (ProtobufSerializer<T> Ser, ProtobufDeserializer<T> Des, ProtobufDeserializer2<T> Des2) GetSerdes<T>() where T : class, IMessage<T>, new() => (
                 new ProtobufSerializer<T>(_schemaRegistryClient, new ProtobufSerializerConfig() { SkipKnownTypes = true }),
-                new ProtobufDeserializer<T>()
+                new ProtobufDeserializer<T>(),
+                new ProtobufDeserializer2<T>()
             );
 
         [Test]
-        public void Null_ShouldBeProperlySerialized()
+        public async Task Null_ShouldBeProperlySerialized()
         {
-            var (ser, des) = GetSerdes<UInt32Value>();
+            var (ser, des, des2) = GetSerdes<UInt32Value>();
 
-            var serialized = ser.SerializeAsync(null, new SerializationContext(MessageComponentType.Value, TestTopic)).Result;
+            var serialized = ser.SerializeAsync(null!, _context).Result;
             Assert.That(serialized, Is.Null);
 
-            var deserialized = des.DeserializeAsync(serialized, true, new SerializationContext(MessageComponentType.Value, TestTopic)).Result;
-            Assert.That(deserialized, Is.Null);
+            var deserialized1 = await des.DeserializeAsync(serialized, true, _context);
+            var deserialized2 = await des2.DeserializeAsync(serialized, true, _context);
+          
+            Assert.That(deserialized1, Is.Null);
+            Assert.That(deserialized2, Is.Null);
         }
 
         [Test]
-        public void Simple_UInt32SerDe()
+        public async Task Simple_UInt32SerDe()
         {
-            var (ser, des) = GetSerdes<UInt32Value>();
+            var (ser, des, des2) = GetSerdes<UInt32Value>();
 
             var v = new UInt32Value { Value = 1234 };
-            var serialized = ser.SerializeAsync(v, new SerializationContext(MessageComponentType.Value, TestTopic)).Result;
-            var deserialized = des.DeserializeAsync(serialized, false, new SerializationContext(MessageComponentType.Value, TestTopic)).Result;
+            var serialized = ser.SerializeAsync(v, _context).Result;
+            var deserialized1 = await des.DeserializeAsync(serialized, false, _context);
+            var deserialized2 = await des2.DeserializeAsync(serialized, false, _context);
 
 
-            Assert.That(deserialized.Value, Is.EqualTo(v.Value));
+            Assert.That(deserialized1.Value, Is.EqualTo(v.Value));
+            Assert.That(deserialized2.Value, Is.EqualTo(v.Value));
         }
 
         private static readonly IEnumerable<TestCaseData> ChangeNotificationSources = new TestCaseData[]
@@ -90,14 +100,14 @@ namespace Tests
         [TestCaseSource(nameof(ChangeNotificationSources))]
         public async Task Complex_ChangeNotification(ChangeNotification data)
         {
-            var (ser, des) = GetSerdes<ChangeNotification>();
+            var (ser, des, des2) = GetSerdes<ChangeNotification>();
+            
+            var serialized = await ser.SerializeAsync(data, _context);
+            var deserialized1 = await des.DeserializeAsync(serialized, false, _context);
+            var deserialized2 = await des2.DeserializeAsync(serialized, false, _context);
 
-            var context = new SerializationContext(MessageComponentType.Value, TestTopic);
-
-            var serialized = await ser.SerializeAsync(data, context);
-            var deserialized = await des.DeserializeAsync(serialized, false, context);
-
-            CheckEquality(deserialized, data);
+            CheckEquality(deserialized1, data);
+            CheckEquality(deserialized2, data);
 
             static void CheckEquality(ChangeNotification actual, ChangeNotification expected)
             {
