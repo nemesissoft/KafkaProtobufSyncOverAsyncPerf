@@ -58,7 +58,7 @@ namespace Tests
 
             var deserialized1 = await des.DeserializeAsync(serialized, true, _context);
             var deserialized2 = await des2.DeserializeAsync(serialized, true, _context);
-          
+
             Assert.That(deserialized1, Is.Null);
             Assert.That(deserialized2, Is.Null);
         }
@@ -100,14 +100,17 @@ namespace Tests
         [TestCaseSource(nameof(ChangeNotificationSources))]
         public async Task Complex_ChangeNotification(ChangeNotification data)
         {
-            var (ser, des, des2) = GetSerdes<ChangeNotification>();
-            
-            var serialized = await ser.SerializeAsync(data, _context);
-            var deserialized1 = await des.DeserializeAsync(serialized, false, _context);
-            var deserialized2 = await des2.DeserializeAsync(serialized, false, _context);
+            var (ser, desConfluent, des2) = GetSerdes<ChangeNotification>();
 
-            CheckEquality(deserialized1, data);
-            CheckEquality(deserialized2, data);
+            var serialized = await ser.SerializeAsync(data, _context);
+            var deserializedConfluent = await desConfluent.DeserializeAsync(serialized, false, _context);
+
+            var deserializedAsync = await des2.DeserializeAsync(serialized, false, _context);
+            var deserializedSync = des2.Deserialize(serialized, false, _context);
+
+            CheckEquality(deserializedConfluent, data);
+            CheckEquality(deserializedAsync, data);
+            CheckEquality(deserializedSync, data);
 
             static void CheckEquality(ChangeNotification actual, ChangeNotification expected)
             {

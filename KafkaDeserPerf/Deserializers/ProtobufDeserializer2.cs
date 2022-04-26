@@ -29,12 +29,10 @@ namespace KafkaDeserPerf.Deserializers
     ///                            a single 0 byte as an optimization.
     ///                         2. The protobuf serialized data.
     /// </remarks>
-    public class ProtobufDeserializer2<T> : IAsyncDeserializer<T> where T : class, IMessage<T>, new()
+    public class ProtobufDeserializer2<T> : IAsyncDeserializer<T>, IDeserializer<T>
+        where T : class, IMessage<T>, new()
     {
-        /// <summary>
-        ///     Magic byte that identifies a message with Confluent Platform framing.
-        /// </summary>
-        public const byte MagicByte = 0;
+        private const byte MagicByte = 0; //Magic byte that identifies a message with Confluent Platform framing.
 
         private readonly bool _useDeprecatedFormat;
 
@@ -62,14 +60,17 @@ namespace KafkaDeserPerf.Deserializers
         /// <param name="isNull">True if this is a null value.</param>
         /// <param name="context">Context relevant to the deserialize operation.</param>
         /// <returns>A <see cref="Task" /> that completes with the deserialized value.</returns>
-        public Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
+        public Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context) 
+            => Task.FromResult(Deserialize(data.Span, isNull, context));
+
+        public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
         {
-            if (isNull) { return Task.FromResult<T>(null); }
+            if (isNull) return null;
 
             if (data.Length < 6)
                 throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
 
-            var spanReader = new SpanBufferReader(data.Span);
+            var spanReader = new SpanBufferReader(data);
 
             var magicByte = spanReader.ReadByte();
             if (magicByte != MagicByte)
@@ -88,7 +89,7 @@ namespace KafkaDeserPerf.Deserializers
                 else
                     spanReader.ReadVarint();
 
-            return Task.FromResult(_parser.ParseFrom(spanReader.Tail()));
+            return _parser.ParseFrom(spanReader.Tail());
         }
     }
 }
