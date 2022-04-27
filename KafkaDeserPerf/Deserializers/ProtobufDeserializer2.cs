@@ -65,7 +65,7 @@ namespace KafkaDeserPerf.Deserializers
 
         public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
         {
-            if (isNull) return null;
+            if (isNull) return null!;//TODO add proper nullability support once IDeserializer<T> would support it 
 
             if (data.Length < 6)
                 throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
