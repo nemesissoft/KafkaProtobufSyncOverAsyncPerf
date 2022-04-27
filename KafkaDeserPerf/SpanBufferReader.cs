@@ -10,29 +10,62 @@ namespace KafkaDeserPerf
     {
         private readonly ReadOnlySpan<byte> _buffer;
         private int _position;
+        /// <summary>
+        /// Length of underlying buffer
+        /// </summary>
         public int Length => _buffer.Length;
 
+        /// <summary>
+        /// Initialize <see cref="SpanBufferReader"/>
+        /// </summary>
+        /// <param name="buffer">Memory buffer to be used</param>
+        /// <param name="position">Starting position</param>
         public SpanBufferReader(ReadOnlySpan<byte> buffer, int position = 0)
         {
             _buffer = buffer;
             _position = position;
         }
 
+        /// <summary>
+        /// Reset current position to default (0)
+        /// </summary>
         public void Reset() => _position = 0;
+        /// <summary>
+        /// Advance current position by given amount 
+        /// </summary>
+        /// <param name="offset">Offset to advance position by</param>
         public void AdvanceBy(int offset) => _position += offset;
+
+        /// <summary>
+        /// Determines if end of buffer was reached 
+        /// </summary>
         public bool IsEnd => _position >= _buffer.Length;
 
-
+        /// <summary>
+        /// Reads 1 byte from underlying stream
+        /// </summary>
+        /// <returns>Byte read ot -1 if EOB is reached</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadByte() => _position >= _buffer.Length ? -1 : _buffer[_position++];
 
+        /// <summary>
+        /// Reads one little endian 32 bits integer from underlying stream
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadInt32() => BinaryPrimitives.ReadInt32LittleEndian(BufferRead(4));
-        
+
+        /// <summary>
+        /// Reads one little endian 64 bits integer from underlying stream
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public long ReadInt64() => BinaryPrimitives.ReadInt64LittleEndian(BufferRead(8));
           
-
+        /// <summary>
+        /// Reads buffer of given size 
+        /// </summary>
+        /// <param name="numBytes">Number of bytes to be read</param>
+        /// <returns>Buffer read from underlying buffer</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown when there is not enough data to read</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public ReadOnlySpan<byte> BufferRead(int numBytes)
         {
@@ -56,6 +89,11 @@ namespace KafkaDeserPerf
 
     public static class SpanBufferReaderExtensions
     {
+        /// <summary>
+        /// Read an integer stored in variable-length format using signed decoding from <a href="http://code.google.com/apis/protocolbuffers/docs/encoding.html"> Google Protocol Buffers</a>
+        /// </summary>
+        /// <returns>The integer read</returns>
+        /// <exception cref="OverflowException">Thrown if variable-length value does not terminate after 5 bytes have been read</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ReadVarint(this ref SpanBufferReader reader)
         {
