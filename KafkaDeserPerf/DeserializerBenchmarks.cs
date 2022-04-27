@@ -44,7 +44,7 @@ namespace KafkaDeserPerf
 
         private static readonly ProtobufDeserializer<AddressBook> _confluent = new();
         private static readonly NonAllocProtobufDeserializer<AddressBook> _nonAlloc = new();
-        private static readonly ProtobufDeserializer2<AddressBook> _efficient = new();
+        private static readonly EfficientProtobufDeserializer<AddressBook> _efficient = new();
 
         [Benchmark(Baseline = true)]
         public int Confluent()

@@ -42,10 +42,10 @@ namespace Tests
             _schemaRegistryClient = schemaRegistryMock.Object;
         }
 
-        private (ProtobufSerializer<T> Ser, ProtobufDeserializer<T> Des, ProtobufDeserializer2<T> Des2) GetSerdes<T>() where T : class, IMessage<T>, new() => (
+        private (ProtobufSerializer<T> Ser, ProtobufDeserializer<T> Des, EfficientProtobufDeserializer<T> Des2) GetSerdes<T>() where T : class, IMessage<T>, new() => (
                 new ProtobufSerializer<T>(_schemaRegistryClient, new ProtobufSerializerConfig() { SkipKnownTypes = true }),
                 new ProtobufDeserializer<T>(),
-                new ProtobufDeserializer2<T>()
+                new EfficientProtobufDeserializer<T>()
             );
 
         [Test]

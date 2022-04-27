@@ -29,7 +29,7 @@ namespace KafkaDeserPerf.Deserializers
     ///                            a single 0 byte as an optimization.
     ///                         2. The protobuf serialized data.
     /// </remarks>
-    public class ProtobufDeserializer2<T> : IAsyncDeserializer<T>, IDeserializer<T>
+    public class EfficientProtobufDeserializer<T> : IAsyncDeserializer<T>, IDeserializer<T>
         where T : class, IMessage<T>, new()
     {
         private const byte MagicByte = 0; //Magic byte that identifies a message with Confluent Platform framing.
@@ -40,7 +40,7 @@ namespace KafkaDeserPerf.Deserializers
 
         /// <summary>Initialize a new ProtobufDeserializer instance.</summary>
         /// <param name="config">Deserializer configuration properties (refer to <see cref="ProtobufDeserializerConfig" />).</param>
-        public ProtobufDeserializer2(IReadOnlyCollection<KeyValuePair<string, string>>? config = null)
+        public EfficientProtobufDeserializer(IReadOnlyCollection<KeyValuePair<string, string>>? config = null)
         {
             _parser = new MessageParser<T>(() => new T());
 
