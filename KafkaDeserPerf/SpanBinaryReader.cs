@@ -1,26 +1,31 @@
 using System;
 using System.Buffers.Binary;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace KafkaDeserPerf
+namespace Memory
 {
-    /// <summary>Lightweight reader wrapper for <see cref="ReadOnlySpan{T}"/> that follows <see cref="System.IO.StreamReader"/> logic</summary>
-    public ref struct SpanBufferReader
+    /// <summary>Lightweight reader wrapper for <see cref="ReadOnlySpan{T}"/> that follows <see cref="System.IO.BinaryReader"/> logic</summary>
+    public ref struct SpanBinaryReader
     {
         private readonly ReadOnlySpan<byte> _buffer;
         private int _position;
+
+        /// <summary>
+        /// Current position
+        /// </summary>
+        public int Position => _position;
+
         /// <summary>
         /// Length of underlying buffer
         /// </summary>
         public int Length => _buffer.Length;
 
         /// <summary>
-        /// Initialize <see cref="SpanBufferReader"/>
+        /// Initialize <see cref="SpanBinaryReader"/>
         /// </summary>
         /// <param name="buffer">Memory buffer to be used</param>
         /// <param name="position">Starting position</param>
-        public SpanBufferReader(ReadOnlySpan<byte> buffer, int position = 0)
+        public SpanBinaryReader(ReadOnlySpan<byte> buffer, int position = 0)
         {
             _buffer = buffer;
             _position = position;
@@ -30,11 +35,19 @@ namespace KafkaDeserPerf
         /// Reset current position to default (0)
         /// </summary>
         public void Reset() => _position = 0;
+
         /// <summary>
-        /// Advance current position by given amount 
+        /// Advance (or retreat) current position by given amount 
         /// </summary>
-        /// <param name="offset">Offset to advance position by</param>
-        public void AdvanceBy(int offset) => _position += offset;
+        /// <param name="offset">Offset to advance position by or retreat by in case of negative numbers</param>
+        public void Seek(int offset)
+        {
+            var newPosition = _position + offset;
+            if (newPosition < 0)
+                throw new ArgumentOutOfRangeException(nameof(offset), offset, $"After advancing by {nameof(offset)} parameter, position should point to non-negative number");
+
+            _position = newPosition;
+        }
 
         /// <summary>
         /// Determines if end of buffer was reached 
@@ -49,17 +62,55 @@ namespace KafkaDeserPerf
         public int ReadByte() => _position >= _buffer.Length ? -1 : _buffer[_position++];
 
         /// <summary>
+        /// Reads one little endian 16 bits integer from underlying stream
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public short ReadInt16() => BinaryPrimitives.ReadInt16LittleEndian(ReadExactly(2));
+
+        /// <summary>
         /// Reads one little endian 32 bits integer from underlying stream
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int ReadInt32() => BinaryPrimitives.ReadInt32LittleEndian(BufferRead(4));
+        public int ReadInt32() => BinaryPrimitives.ReadInt32LittleEndian(ReadExactly(4));
 
         /// <summary>
         /// Reads one little endian 64 bits integer from underlying stream
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public long ReadInt64() => BinaryPrimitives.ReadInt64LittleEndian(BufferRead(8));
-          
+        public long ReadInt64() => BinaryPrimitives.ReadInt64LittleEndian(ReadExactly(8));
+
+        /// <summary>
+        /// Reads boolean value from underlying stream
+        /// </summary>
+        /// <returns><c>true</c> is byte read is non-zero, <c>false</c> otherwise</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public bool ReadBoolean() => ReadExactly(1) is var slice && slice[0] != 0;
+
+        /// <summary>
+        /// Reads one little endian 32 bits floating number from underlying stream
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public float ReadSingle() => BinaryPrimitives.ReadSingleLittleEndian(ReadExactly(4));
+
+        /// <summary>
+        /// Reads one little endian 64 bits floating number from underlying stream
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public double ReadDouble() => BinaryPrimitives.ReadDoubleLittleEndian(ReadExactly(8));
+
+        /// <summary>
+        /// Reads one little endian 128 bits decimal number from underlying stream
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public decimal ReadDecimal()
+        {
+            int lo = ReadInt32();
+            int mid = ReadInt32();
+            int hi = ReadInt32();
+            int flags = ReadInt32();
+            return new decimal(lo, mid, hi, (flags & 0b_1000_0000_0000_0000_0000_0000_0000_0000) != 0, (byte)((flags >> 16) & 0xFF));
+        }
+
         /// <summary>
         /// Reads buffer of given size 
         /// </summary>
@@ -67,24 +118,24 @@ namespace KafkaDeserPerf
         /// <returns>Buffer read from underlying buffer</returns>
         /// <exception cref="ArgumentOutOfRangeException">Thrown when there is not enough data to read</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ReadOnlySpan<byte> BufferRead(int numBytes)
+        public ReadOnlySpan<byte> ReadExactly(int numBytes)
         {
-            Debug.Assert(numBytes is >= 2 and <= 16, "value of 1 should use ReadByte. For value > 16 implement more efficient read method");
-            int origPos = _position;
-            int newPos = origPos + numBytes;
+            if (numBytes < 1) throw new ArgumentOutOfRangeException(nameof(numBytes), $"'{numBytes}' should be at least 1");
 
-            if ((uint)newPos > (uint)_buffer.Length)
-            {
-                _position = _buffer.Length;
+            int newPosition = _position + numBytes;
+
+            if (newPosition > _buffer.Length)
                 throw new ArgumentOutOfRangeException(nameof(numBytes), $"Not enough data to read {numBytes} bytes from underlying buffer");
-            }
 
-            var span = _buffer.Slice(origPos, numBytes);
-            _position = newPos;
+            var span = _buffer.Slice(_position, numBytes);
+            _position = newPosition;
             return span;
         }
 
-        public ReadOnlySpan<byte> Tail() => _buffer.Slice(_position, _buffer.Length - _position);
+        /// <summary>
+        /// Returns remaining bytes from underlying buffer
+        /// </summary>
+        public ReadOnlySpan<byte> Remaining() => _buffer.Slice(_position, _buffer.Length - _position);
     }
 
     public static class SpanBufferReaderExtensions
@@ -95,7 +146,7 @@ namespace KafkaDeserPerf
         /// <returns>The integer read</returns>
         /// <exception cref="OverflowException">Thrown if variable-length value does not terminate after 5 bytes have been read</exception>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int ReadVarint(this ref SpanBufferReader reader)
+        public static int ReadVarint(this ref SpanBinaryReader reader)
         {
             var value = ReadUnsignedVarint(ref reader);
             return (int)((value >> 1) ^ -(value & 1));
@@ -109,7 +160,7 @@ namespace KafkaDeserPerf
         ///     Inspired by: https://github.com/apache/kafka/blob/2.5/clients/src/main/java/org/apache/kafka/common/utils/ByteUtils.java#L142
         /// </remarks>
         /// <exception cref="OverflowException">Thrown if variable-length value does not terminate after 5 bytes have been read</exception>
-        public static uint ReadUnsignedVarint(this ref SpanBufferReader reader)
+        public static uint ReadUnsignedVarint(this ref SpanBinaryReader reader)
         {
             int value = 0;
             int i = 0;

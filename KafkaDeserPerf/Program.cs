@@ -1,4 +1,7 @@
 ﻿using System;
+using System.IO;
+using System.Linq.Expressions;
+using System.Text;
 using BenchmarkDotNet.Running;
 
 
@@ -8,7 +11,6 @@ namespace KafkaDeserPerf
     {
         static void Main(string[] args)
         {
-            //new DeserializerBenchmarks().Confluent();
             //new DeserializerBenchmarks().NonAlloc();
             //new DeserializerBenchmarks().NonAllocSync();
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);

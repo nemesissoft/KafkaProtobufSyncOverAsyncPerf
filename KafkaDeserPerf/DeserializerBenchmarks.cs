@@ -5,6 +5,8 @@ using BenchmarkDotNet.Attributes;
 using Confluent.Kafka;
 using Confluent.SchemaRegistry.Serdes;
 
+using Google.Protobuf.WellKnownTypes;
+
 using KafkaDeserPerf.Deserializers;
 
 
@@ -47,6 +49,26 @@ namespace KafkaDeserPerf
         private static readonly EfficientProtobufDeserializer<AddressBook> _efficient = new();
 
         [Benchmark(Baseline = true)]
+        public int Create()
+        {
+            int id = 0;
+            for (int i = 0; i < Iterations; i++)
+            {
+                var p = new Person
+                {
+                    Email = "mb@gmail.com",
+                    Id = 123,
+                    LastUpdated = new Google.Protobuf.WellKnownTypes.Timestamp() { Seconds = 1634162400, Nanos = 0 },
+                    Name = "Mike",
+                    Phones = { new Person.Types.PhoneNumber { Number = "123-456", Type = Person.Types.PhoneType.Home } }
+                };
+                var ab = new AddressBook { People = { p } };
+                id = ab.People[0].Id;
+            }
+            return id;
+        }
+
+        [Benchmark]
         public int Confluent()
         {
             int id = 0;

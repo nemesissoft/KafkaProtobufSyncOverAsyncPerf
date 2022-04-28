@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using Confluent.Kafka;
 using Confluent.SchemaRegistry.Serdes;
 
 using Google.Protobuf;
+using Memory;
 
 
 namespace KafkaDeserPerf.Deserializers
@@ -29,7 +31,7 @@ namespace KafkaDeserPerf.Deserializers
     ///                            a single 0 byte as an optimization.
     ///                         2. The protobuf serialized data.
     /// </remarks>
-    public class EfficientProtobufDeserializer<T> : IAsyncDeserializer<T>, IDeserializer<T>
+    public class EfficientProtobufDeserializer<T> : IAsyncDeserializer<T?>, IDeserializer<T?>
         where T : class, IMessage<T>, new()
     {
         private const byte MagicByte = 0; //Magic byte that identifies a message with Confluent Platform framing.
@@ -60,7 +62,7 @@ namespace KafkaDeserPerf.Deserializers
         /// <param name="isNull">True if this is a null value.</param>
         /// <param name="context">Context relevant to the deserialize operation.</param>
         /// <returns>A <see cref="Task" /> that completes with the deserialized value.</returns>
-        public Task<T> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context) 
+        public Task<T?> DeserializeAsync(ReadOnlyMemory<byte> data, bool isNull, SerializationContext context)
             => Task.FromResult(Deserialize(data.Span, isNull, context));
 
         /// <summary>Deserialize an object of type <typeparamref name="T"/> from a byte array.</summary>
@@ -68,14 +70,14 @@ namespace KafkaDeserPerf.Deserializers
         /// <param name="isNull">True if this is a null value.</param>
         /// <param name="context">Context relevant to the deserialize operation.</param>
         /// <returns>Deserialized value.</returns>
-        public T Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
+        public T? Deserialize(ReadOnlySpan<byte> data, bool isNull, SerializationContext context)
         {
-            if (isNull) return null!;//TODO add proper nullability support once IDeserializer<T> would support it 
+            if (isNull) return null;
 
             if (data.Length < 6)
                 throw new InvalidDataException($"Expecting data framing of length 6 bytes or more but total data size is {data.Length} bytes");
 
-            var spanReader = new SpanBufferReader(data);
+            var spanReader = new SpanBinaryReader(data);
 
             var magicByte = spanReader.ReadByte();
             if (magicByte != MagicByte)
@@ -84,7 +86,7 @@ namespace KafkaDeserPerf.Deserializers
             // A schema is not required to deserialize protobuf messages since the serialized data includes tag and type information, which is enough for
             // the IMessage<T> implementation to deserialize the data (even if the schema has evolved). Schema Id is thus unused
             // EDIT: so just advancing by 4 bytes is enough
-            spanReader.AdvanceBy(4); //var _schemaId = IPAddress.NetworkToHostOrder(spanReader.ReadInt32());
+            spanReader.Seek(4); //var _schemaId = IPAddress.NetworkToHostOrder(spanReader.ReadInt32());
 
             // Read the index array length, then all of the indices. These are not needed, but parsing them is the easiest way to seek to the start of the serialized data because they are varints.
             var indicesLength = _useDeprecatedFormat ? (int)spanReader.ReadUnsignedVarint() : spanReader.ReadVarint();
@@ -94,7 +96,7 @@ namespace KafkaDeserPerf.Deserializers
                 else
                     spanReader.ReadVarint();
 
-            return _parser.ParseFrom(spanReader.Tail());
+            return _parser.ParseFrom(spanReader.Remaining());
         }
     }
 }
