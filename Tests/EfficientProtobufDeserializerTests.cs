@@ -17,7 +17,7 @@ using Timestamp = Google.Protobuf.WellKnownTypes.Timestamp;
 
 namespace Tests
 {
-    public class ProtobufSerdesTests
+    public class EfficientProtobufDeserializerTests
     {
         private ISchemaRegistryClient? _schemaRegistryClient;
         private SerializationContext _context;
@@ -53,7 +53,7 @@ namespace Tests
         {
             var (ser, des, des2) = GetSerdes<UInt32Value>();
 
-            var serialized = ser.SerializeAsync(null!, _context).Result;
+            var serialized = await ser.SerializeAsync(null!, _context);
             Assert.That(serialized, Is.Null);
 
             var deserialized1 = await des.DeserializeAsync(serialized, true, _context);
@@ -69,13 +69,13 @@ namespace Tests
             var (ser, des, des2) = GetSerdes<UInt32Value>();
 
             var v = new UInt32Value { Value = 1234 };
-            var serialized = ser.SerializeAsync(v, _context).Result;
+            var serialized = await ser.SerializeAsync(v, _context);
             var deserialized1 = await des.DeserializeAsync(serialized, false, _context);
             var deserialized2 = await des2.DeserializeAsync(serialized, false, _context);
 
 
             Assert.That(deserialized1.Value, Is.EqualTo(v.Value));
-            Assert.That(deserialized2.Value, Is.EqualTo(v.Value));
+            Assert.That(deserialized2?.Value, Is.EqualTo(v.Value));
         }
 
         private static readonly IEnumerable<TestCaseData> ChangeNotificationSources = new TestCaseData[]
@@ -112,8 +112,11 @@ namespace Tests
             CheckEquality(deserializedAsync, data);
             CheckEquality(deserializedSync, data);
 
-            static void CheckEquality(ChangeNotification actual, ChangeNotification expected)
+            static void CheckEquality(ChangeNotification? actual, ChangeNotification expected)
             {
+                if (actual is null)
+                    throw new NullReferenceException("Not expected");
+
                 Assert.That(actual.Id, Is.EqualTo(expected.Id));
                 Assert.That(actual.Status, Is.EqualTo(expected.Status));
                 Assert.That(actual.Time, Is.EqualTo(expected.Time));

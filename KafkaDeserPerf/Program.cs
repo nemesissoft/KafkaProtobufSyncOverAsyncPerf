@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
+
 using BenchmarkDotNet.Running;
 
 
@@ -10,9 +13,7 @@ namespace KafkaDeserPerf
     class Program
     {
         static void Main(string[] args)
-        {
-            //new DeserializerBenchmarks().NonAlloc();
-            //new DeserializerBenchmarks().NonAllocSync();
+        {            
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
         }
 

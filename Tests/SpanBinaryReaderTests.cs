@@ -83,7 +83,7 @@ namespace Tests
                     case float f: bw.Write(f); break;
                     case double d: bw.Write(d); break;
                     case decimal m: bw.Write(m); break;
-                    default: throw new ArgumentException();
+                    default: throw new NotSupportedException();
                 }
             }
             bw.Flush();
@@ -129,17 +129,20 @@ namespace Tests
 
         private static IEnumerable<TCD> UnsignedVarintExamples = new (uint Number, byte[] Bytes)[]
         {
-            (        0, new[]{ (byte)0b_00000000} ),
-            (      127, new[]{ (byte)0b_01111111} ),
-            (      128, new[]{ (byte)0b_10000000, (byte)0b_00000001} ),
-            (      300, new[]{ (byte)0b_10101100, (byte)0b_00000010} ),
-            (     8192, new[]{ (byte)0b_10000000, (byte)0b_01000000} ),
-            (    16383, new[]{ (byte)0b_11111111, (byte)0b_01111111} ),
-            (    16384, new[]{ (byte)0b_10000000, (byte)0b_10000000, (byte)0b_00000001} ),
-            (  2097151, new[]{ (byte)0b_11111111, (byte)0b_11111111, (byte)0b_01111111} ),
-            (  2097152, new[]{ (byte)0b_10000000, (byte)0b_10000000, (byte)0b_10000000, (byte)0b_00000001 }),
-            (134217728, new[]{ (byte)0b_10000000, (byte)0b_10000000, (byte)0b_10000000, (byte)0b_01000000 }),
-            (268435455, new[]{ (byte)0b_11111111, (byte)0b_11111111, (byte)0b_11111111, (byte)0b_01111111 }),
+            (            0, new[]{ (byte)0b_00000000} ),
+            (          127, new[]{ (byte)0b_01111111} ),
+            (          128, new[]{ (byte)0b_10000000, (byte)0b_00000001} ),
+            (          300, new[]{ (byte)0b_10101100, (byte)0b_00000010} ),
+            (         8192, new[]{ (byte)0b_10000000, (byte)0b_01000000} ),
+            (        16383, new[]{ (byte)0b_11111111, (byte)0b_01111111} ),
+            (        16384, new[]{ (byte)0b_10000000, (byte)0b_10000000, (byte)0b_00000001} ),
+            (      2097151, new[]{ (byte)0b_11111111, (byte)0b_11111111, (byte)0b_01111111} ),
+            (      2097152, new[]{ (byte)0b_10000000, (byte)0b_10000000, (byte)0b_10000000, (byte)0b_00000001 }),
+            (    134217728, new[]{ (byte)0b_10000000, (byte)0b_10000000, (byte)0b_10000000, (byte)0b_01000000 }),
+            (    268435455, new[]{ (byte)0b_11111111, (byte)0b_11111111, (byte)0b_11111111, (byte)0b_01111111 }),
+
+            (4294967295u-1, new[]{ (byte)0b_11111110, (byte)0b_11111111, (byte)0b_11111111, (byte)0b_11111111, (byte)0b_00001111 }),
+            (  4294967295u, new[]{ (byte)0b_11111111, (byte)0b_11111111, (byte)0b_11111111, (byte)0b_11111111, (byte)0b_00001111 }),
         }.Select(p => new TCD(p.Bytes, p.Number).SetName($"UnsignedVarint_{p.Number:000000000}"));
 
         [TestCaseSource(nameof(UnsignedVarintExamples))]
@@ -169,9 +172,15 @@ namespace Tests
 
             Assert.That(sut.ReadUnsignedVarint(), Is.EqualTo(expectedNumber));
 
+
+            ms.Position = 0;
+            using var br = new BinaryReader(ms);
+            var sys = br.Read7BitEncodedInt64();
+            Assert.That(sys, Is.EqualTo(expectedNumber), $"System read. Expected {expectedNumber} but got {sys}");
+
+
             static string SpanToString(ReadOnlySpan<byte> span) =>
                 string.Join(", ", span.ToArray().Select(b => b.ToString("X2")));
-
 
             Assert.That(sut.IsEnd, Is.True, $"End not reached. Remaining [{SpanToString(sut.Remaining())}] out of [{SpanToString(buffer)}]");
         }
