@@ -6,6 +6,7 @@ using TCD = NUnit.Framework.TestCaseData;
 using System;
 using System.Runtime.CompilerServices;
 using Memory;
+using System.Runtime.InteropServices;
 
 namespace Tests
 {
@@ -33,6 +34,41 @@ namespace Tests
             var sut = new SpanBinaryReader(new byte[] { 1, 2, 3, 4, 5 }, 2);
 
             var actual = sut.ReadExactly(numBytes);
+            var actualText = string.Join("|", actual.ToArray());
+
+            Assert.That(actualText, Is.EqualTo(expectedArray));
+        }
+
+        [TestCase(0, 0, "")]
+        [TestCase(1, 1, "3")]
+        [TestCase(2, 2, "3|4")]
+        [TestCase(3, 3, "3|4|5")]
+        [TestCase(4, 3, "3|4|5|0")]
+        [TestCase(5, 3, "3|4|5|0|0")]
+        public void Read_ToBuffer_ShouldBeAbleToReadBytes(int bufferSize, int expectedCount, string expectedArray)
+        {
+            var sut = new SpanBinaryReader(new byte[] { 1, 2, 3, 4, 5 }, 2);
+            //                                                ^
+            Span<byte> buffer = stackalloc byte[bufferSize];                      
+
+            var count = sut.ReadTo(MemoryMarshal.CreateSpan(ref MemoryMarshal.GetReference(buffer), buffer.Length));
+            var actualText = string.Join("|", buffer.ToArray());
+
+            Assert.That(actualText, Is.EqualTo(expectedArray));
+            Assert.That(count, Is.EqualTo(expectedCount));
+        }
+
+        [TestCase(0, "")]
+        [TestCase(1, "3")]
+        [TestCase(2, "3|4")]
+        [TestCase(3, "3|4|5")]
+        [TestCase(4, "3|4|5")]
+        [TestCase(5, "3|4|5")]
+        public void Read_NumBytes_ShouldBeAbleToReadBytes(int numBytes, string expectedArray)
+        {
+            var sut = new SpanBinaryReader(new byte[] { 1, 2, 3, 4, 5 }, 2);
+
+            var actual = sut.Read(numBytes);
             var actualText = string.Join("|", actual.ToArray());
 
             Assert.That(actualText, Is.EqualTo(expectedArray));

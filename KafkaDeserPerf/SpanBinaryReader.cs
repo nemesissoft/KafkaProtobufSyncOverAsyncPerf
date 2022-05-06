@@ -111,8 +111,50 @@ namespace Memory
             return new decimal(lo, mid, hi, (flags & 0b_1000_0000_0000_0000_0000_0000_0000_0000) != 0, (byte)((flags >> 16) & 0xFF));
         }
 
+
         /// <summary>
-        /// Reads buffer of given size 
+        /// Reads a sequence of bytes from the current stream and advances the position within the stream by the number of bytes read.
+        /// </summary>
+        /// <param name="buffer">A region of memory. When this method returns, the contents of this region are replaced by the bytes read from the current source.</param>
+        /// <returns>The total number of bytes read into the buffer. This can be less than the number of bytes allocated in the buffer if that many bytes are not currently available, or zero (0) if the end of the stream has been reached.</returns>        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public int ReadTo(Span<byte> buffer)
+        {
+            int n = Math.Min(Length - Position, buffer.Length);
+            if (n <= 0)
+                return 0;
+
+            _buffer.Slice(_position, n).CopyTo(buffer);
+
+            _position += n;
+            return n;
+        }
+
+
+        /// <summary>
+        /// Reads buffer of given size at most
+        /// </summary>
+        /// <param name="numBytes">Number of bytes to be read at most</param>
+        /// <returns>Buffer read from underlying buffer</returns>        
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ReadOnlySpan<byte> Read(int numBytes)
+        {
+            if (numBytes < 0) throw new ArgumentOutOfRangeException(nameof(numBytes), $"'{numBytes}' should be non negative");
+
+            int n = Math.Min(Length - Position, numBytes);
+            if (n <= 0)
+                return ReadOnlySpan<byte>.Empty;
+
+            var result = _buffer.Slice(_position, n);
+
+            _position += n;
+
+            return result;
+        }
+
+
+        /// <summary>
+        /// Reads buffer of exact given size 
         /// </summary>
         /// <param name="numBytes">Number of bytes to be read</param>
         /// <returns>Buffer read from underlying buffer</returns>
