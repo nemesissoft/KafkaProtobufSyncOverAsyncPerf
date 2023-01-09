@@ -3,7 +3,7 @@
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
 		<LangVersion>9.0</LangVersion>
-		<TargetFramework>net5.0</TargetFramework>
+		<TargetFramework>net6.0</TargetFramework>
 		<Nullable>enable</Nullable>
 
 	</PropertyGroup>
@@ -16,6 +16,8 @@
 		<PackageReference Include="Confluent.SchemaRegistry.Serdes.Protobuf" Version="1.8.2" />
 
 		<PackageReference Include="Google.Protobuf" Version="3.20.1" />
+
+		<PackageReference Include="DotNext" Version="4.5.0" />
 	</ItemGroup>
 
 </Project>
